@@ -1,0 +1,9 @@
+# 秘密鍵・鍵素材は絶対にコミットしない（識別情報は ~/.technocore/identity.json に隔離）
+identity.json
+state.json
+*.key
+*.pem
+secrets/
+.env
+.env.*
+node_modules/
