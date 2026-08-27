@@ -9,3 +9,5 @@ secrets/
 node_modules/
 score-log.jsonl
 .commitmsg
+kibble-loop.log
+kibble-loop.stop

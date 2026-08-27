@@ -22,7 +22,23 @@ const getJson = async (url) =>
   (await (await fetch(url, { signal: AbortSignal.timeout(120_000) })).json());
 
 const stamp = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
-const log = (msg) => console.log(`[${stamp()}] ${msg}`);
+
+// Write to a file as well as stdout. Killing the shell that launched this loop orphans the
+// node process rather than stopping it, and once the pipe breaks stdout goes nowhere while
+// the loop keeps posting - so the file is the only durable record of what it did.
+const LOGFILE = 'kibble-loop.log';
+const log = (msg) => {
+  const line = `[${stamp()}] ${msg}`;
+  console.log(line);
+  try {
+    fs.appendFileSync(LOGFILE, line + '\n');
+  } catch {}
+};
+
+// Cooperative stop, for the same reason: `touch kibble-loop.stop` ends it cleanly at the next
+// cycle boundary without having to hunt the right pid.
+const STOPFILE = 'kibble-loop.stop';
+const stopRequested = () => fs.existsSync(STOPFILE);
 
 function ourLines() {
   const out = { claimed: new Set(), delivered: new Set(), attested: [], briefs: 0 };
@@ -134,6 +150,9 @@ async function postBrief() {
   return 1;
 }
 
+// The passport is the only authoritative read on whether our work counted. Checking a job's
+// attestations array instead is misleading: the board returns roughly 80 of nearly 3000 jobs,
+// so a credited verdict disappears from view as soon as its job rolls out of the window.
 function recordScore(board) {
   const p = (board.passports ?? []).find((x) => x.did === ME);
   const mine = ourLines();
@@ -148,26 +167,37 @@ function recordScore(board) {
     briefs_posted: mine.briefs,
   };
   fs.appendFileSync(LOG, JSON.stringify(row) + '\n');
-  const projected = mine.attested.length * 2 + mine.delivered.size * 1 + mine.briefs * 5;
   log(
-    `score: ${p ? `${p.score} (rank ${p.rank})` : 'unranked'} · cutoff ${row.cutoff} · ` +
-      `our lines: ${mine.attested.length} attests, ${mine.delivered.size} results, ${mine.briefs} briefs · ` +
-      `if all counted: ${projected}`
+    `score: ${p ? `${p.score} (rank ${p.rank}, ${p.attestations_given} attests + ${p.briefs} briefs credited)` : 'unranked'} · ` +
+      `cutoff ${row.cutoff} · we posted ${mine.attested.length} attests, ${mine.briefs} briefs`
   );
 }
 
 let cycle = 0;
-log(`loop start · ${ME.slice(0, 32)}… · cycle ${CYCLE_MS / 1000}s`);
+let lastParsed = null;
+log(`loop start · ${ME.slice(0, 32)}… · cycle ${CYCLE_MS / 1000}s · stop with: New-Item kibble-loop.stop`);
 
 for (;;) {
+  if (stopRequested()) {
+    log('stop file present, exiting cleanly');
+    fs.rmSync(STOPFILE, { force: true });
+    break;
+  }
   cycle++;
   try {
-    await attestPass();
-
-    const mine = ourLines();
-    if (cycle % 5 === 0) await deliverValidatorReports(mine);
-    if (cycle % 20 === 0) await postBrief();
-
+    // Nothing is credited while the host's tape ingest is stalled, so skip the writes and
+    // keep watching instead of burning lines into a frozen aggregator.
+    const board = await getJson(BOARD);
+    const parsed = board.stats?.parsed ?? 0;
+    if (parsed === lastParsed) {
+      log(`ingest appears stalled (parsed still ${parsed}) — holding writes this cycle`);
+    } else {
+      lastParsed = parsed;
+      await attestPass();
+      const mine = ourLines();
+      if (cycle % 5 === 0) await deliverValidatorReports(mine);
+      if (cycle % 20 === 0) await postBrief();
+    }
     recordScore(await getJson(BOARD));
   } catch (err) {
     log(`cycle ${cycle} error: ${String(err.message).split('\n')[0]}`);
