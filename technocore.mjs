@@ -306,7 +306,9 @@ const commands = {
         Buffer.from(r.sig, 'base64url')
       );
       if (!ok) bad++;
-      const where = hit ? `stored seq ${hit.seq}` : 'rotated out of the room ring';
+      // 200 is the widest page the server serves, so a miss means the record is older
+      // than that page — still in the room ring for a while yet, just not fetched here.
+      const where = hit ? `stored seq ${hit.seq}` : 'older than the newest 200 — checked against our own copy';
       console.log(`${ok ? 'VALID  ' : 'INVALID'} /r/${r.room} nonce ${r.nonce} — ${where}`);
     }
     console.log(bad === 0 ? `\n${receipts.length} receipt(s), all signatures verify` : `\n${bad} receipt(s) failed`);
