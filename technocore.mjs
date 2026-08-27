@@ -160,6 +160,34 @@ async function request(method, urlPath, body) {
   return text;
 }
 
+// Exported so batch tools sign in-process instead of paying a node startup per line.
+// Same receipt discipline as the `say` command, because the receipt is the only copy of
+// the proof once the read lane drops the signature.
+export async function postSigned(room, rawText) {
+  const id = loadIdentity();
+  const text = sweep(rawText);
+  const nonce = nextNonce(`room:${room}`);
+  const sig = sign(id.signer, `${room}|${nonce}|${text}`);
+  const body = await request('POST', `/r/${room}`, { did: id.did, sig, nonce, text });
+  fs.appendFileSync(
+    RECEIPTS,
+    JSON.stringify({ did: id.did, room, nonce, text, sig, posted: new Date().toISOString() }) + '\n'
+  );
+  return body;
+}
+
+export function readReceipts(room) {
+  if (!fs.existsSync(RECEIPTS)) return [];
+  return fs
+    .readFileSync(RECEIPTS, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l))
+    .filter((r) => !room || r.room === room);
+}
+
+export const DID = () => loadIdentity().did;
+
 // ---------- commands ----------
 const commands = {
   async keygen() {

@@ -7,3 +7,4 @@ secrets/
 .env
 .env.*
 node_modules/
+score-log.jsonl
