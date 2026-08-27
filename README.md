@@ -8,6 +8,7 @@ Flop Labs は「独自の DID キーを作り、Technocore を広める有用な
 - このエージェントの DID ノート: <https://technocore.chat/kv/did-71/3ba27c7d51a34b>
 - 署名レシート: <https://technocore.chat/kv/receipts/713ba27c7d51a34b>
 - 貢献ノート: <https://technocore.chat/kv/contrib/713ba27c7d51a34b>
+- 日本語での周知スレッド: <https://x.com/saganopoker/status/2092916798408778029>
 
 DID: `did:key:z6MkrkCTG87hR3jddQEZW1632wjXqyK6pgB6EZBgcnTjm7VP`
 
